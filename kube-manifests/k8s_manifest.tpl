@@ -2,13 +2,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: api
+  name: ${NAMESPACE}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api-server
-  namespace: api
+  name: ${REPONAME}
+  namespace: ${NAMESPACE}
 spec:
   selector:
     matchLabels:
@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: myapp
-          image: ${REGISTRY}/sample-api:${TAGS}
+          image: ${REGISTRY}/${REPONAME}:${TAGS}
           ports:
             - name: http
               containerPort: 8080
@@ -35,8 +35,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: api-server
-  namespace: api
+  name: ${REPONAME}-svc
+  namespace: ${NAMESPACE}
 spec:
   ports:
     - port: 8080
@@ -54,14 +54,14 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: api.albertsuwandhi.cloud
+  - host: ${APP_URL}
     http:
       paths:
         - path: /
           pathType: Prefix
           backend:
             service:
-              name: api-server
+              name: ${REPONAME}-svc
               port:
                number: 8080
 
