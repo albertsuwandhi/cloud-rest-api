@@ -77,6 +77,9 @@ jobs:
       REGISTRY: ${{ needs.Build-Push-Scan-Container-Image.outputs.registry }}
       TAGS: ${{ needs.Build-Push-Scan-Container-Image.outputs.tags }}
       REPONAME: ${{ github.event.repository.name }}
+      NAMESPACE: ${{ vars.NAMESPACE }}
+      REPLICAS: ${{ vars.REPLICAS }}
+      APP_URL: ${{ vars.APP_URL }}
     needs: ["Build-Push-Scan-Container-Image"]
     runs-on: ubuntu-latest
     steps:
