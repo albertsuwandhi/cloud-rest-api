@@ -10,7 +10,7 @@ import (
 var (
 	port    = 8080
 	name    = "API-Server"
-	version = "v0.1.1"
+	version = "v0.1.2"
 )
 
 func init() {}
