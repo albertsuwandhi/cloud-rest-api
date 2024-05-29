@@ -1,0 +1,16 @@
+# Ignore GitHub workflows folder
+.github/workflows
+
+# Ignore kube-manifest folder
+kube-manifests
+
+# Ignore .DS_Store files
+.DS_Store
+
+# Exclude git related folders
+.git
+.gitignore
+.gitattributes
+
+# Exclude README.md
+README.md

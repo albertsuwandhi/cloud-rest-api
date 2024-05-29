@@ -1,0 +1,103 @@
+name: 'Build and Deploy to Dev Cluster'
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    types:
+      - closed
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  id-token: write # This is required for AWS oidc connection
+  contents: read # This is required for actions/checkout
+  pull-requests: write # This is required for gh bot to comment PR
+
+jobs:
+  Build-Push-Scan-Container-Image:
+    name: Build Push and Scan Container Image to ECR
+    environment: dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - id: commit
+        uses: prompt/actions-commit-hash@v3
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: GitHub-Deploy-EKS
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build, Tag, and Push Image to Amazon ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ github.event.repository.name }}
+          IMAGE_TAG: ${{ steps.commit.outputs.short }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+      - name: Run Trivy - Container Image Scan
+        if: vars.SCAN_CONTAINER_IMAGE == 1 
+        env: 
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ github.event.repository.name }}
+          IMAGE_TAG: ${{ steps.commit.outputs.short }}
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          format: template # table, json, sarif, template.
+          template: "@/contrib/html.tpl"
+          # exit-code: '1' # FAIL the pipeline or execution if have vulnerabilities
+          ignore-unfixed: true
+          scanners : 'vuln'
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+          output: 'trivy-container-scan-report.html'
+      - name: Upload Upload Trivy Container Image Scan
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-container-scan-report
+          path: './trivy-container-scan-report.html'
+          retention-days: 7 # 90 is the default
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
+      tags: ${{ steps.commit.outputs.short }}
+
+  Deploy-to-EKS:
+    name: Deploy to EKS
+    environment: dev
+    env:
+      REGISTRY: ${{ needs.Build-Push-Scan-Container-Image.outputs.registry }}
+      TAGS: ${{ needs.Build-Push-Scan-Container-Image.outputs.tags }}
+      REPONAME: ${{ github.event.repository.name }}
+    needs: ["Build-Push-Scan-Container-Image"]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: envsubst
+      run : |
+        envsubst < kube-manifests/k8s_manifest.tpl > k8s_manifest.yaml && cat ./k8s_manifest.yaml
+    - name: install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.29.5' # Default is latest stable, please use the same version of the cluster or +/- 1
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ vars.AWS_REGION }}
+        role-session-name: GitHub-Deploy-EKS
+    - name: update kubeconfig
+      run: |
+        aws eks update-kubeconfig --name ${{ vars.EKS_CLUSTER_NAME }} --region=${{ vars.AWS_REGION }}
+    - name: Apply YAML
+      run: |
+        kubectl apply -f k8s_manifest.yaml
