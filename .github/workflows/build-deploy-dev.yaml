@@ -1,9 +1,9 @@
 name: 'Build and Deploy to Dev Cluster'
 
 on:
-  push:
-    branches:
-      - dev
+  # push:
+  #   branches:
+  #     - dev
   pull_request:
     types:
       - closed
