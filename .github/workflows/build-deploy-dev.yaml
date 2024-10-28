@@ -1,9 +1,9 @@
 name: 'Build and Deploy to Dev Cluster'
 
 on:
-  push:
-    branches:
-      - dev
+  # push:
+  #   branches:
+  #     - dev
   pull_request:
     types:
       - closed
@@ -44,14 +44,14 @@ jobs:
           docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
           docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
       - name: Run Trivy - Container Image Scan
-        if: vars.SCAN_CONTAINER_IMAGE == 1 
+        if: vars.SCAN_CONTAINER_IMAGE == 1 # Can use ECR Scan on Push, can set SCAN_CONTAINER_IMAGE to 0
         env: 
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           REPOSITORY: ${{ github.event.repository.name }}
           IMAGE_TAG: ${{ steps.commit.outputs.short }}
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          image-ref: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}:${{ env.IMAGE_TAG }}
           format: template # table, json, sarif, template.
           template: "@/contrib/html.tpl"
           # exit-code: '1' # FAIL the pipeline or execution if have vulnerabilities
@@ -77,6 +77,9 @@ jobs:
       REGISTRY: ${{ needs.Build-Push-Scan-Container-Image.outputs.registry }}
       TAGS: ${{ needs.Build-Push-Scan-Container-Image.outputs.tags }}
       REPONAME: ${{ github.event.repository.name }}
+      NAMESPACE: ${{ vars.NAMESPACE }}
+      REPLICAS: ${{ vars.REPLICAS }}
+      APP_URL: ${{ vars.APP_URL }}
     needs: ["Build-Push-Scan-Container-Image"]
     runs-on: ubuntu-latest
     steps:
